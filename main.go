@@ -39,9 +39,7 @@ func main() {
 		for cursor.Next(context.Background()) {
 			var elem bson.M
 			err := cursor.Decode(&elem)
-			if err != nil {
-				log.Fatal(err)
-			}
+			handleError(err)
 			result = append(result, &elem)
 		}
 		err := cursor.Err();
