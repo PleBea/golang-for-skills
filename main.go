@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
-	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
+
 
 func handleError(err error) {
 	if err != nil {
@@ -20,11 +26,48 @@ func handleError(err error) {
 	}
 }
 
+type DatabaseConfig struct {
+	Username            string `json:"username"`
+	Password            string `json:"password"`
+	Engine              string `json:"engine"`
+	Host                string `json:"host"`
+	Port                int64    `json:"port"`
+	Ssl                 bool   `json:"ssl"`
+}
+
+func loadSecretManager() (DatabaseConfig) {
+	secretName := "db_access"
+	region := "ap-northeast-2"
+	config, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+	handleError(err)
+
+	svc := secretsmanager.NewFromConfig(config)
+
+	input := &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(secretName),
+	}
+
+	result, err := svc.GetSecretValue(context.TODO(), input)
+	handleError(err)
+
+	var secretString string = *result.SecretString
+
+	var secret DatabaseConfig
+
+	err = json.Unmarshal([]byte(secretString), &secret)
+	handleError(err)
+
+	return secret
+}
+
 func main() {
+	config := loadSecretManager()
+	
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGODB_URL")))
+	uri := "mongodb://" + config.Username + ":" + config.Password + "@" + config.Host + ":" + strconv.FormatInt(config.Port, 10) + "/?ssl=" + strconv.FormatBool(config.Ssl)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	handleError(err)
 
 	uesrsCollection := client.Database("test").Collection("user")
