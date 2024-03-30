@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -13,10 +14,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
 
@@ -35,34 +32,19 @@ type DatabaseConfig struct {
 	Ssl                 bool   `json:"ssl"`
 }
 
-func loadSecretManager() (DatabaseConfig) {
-	secretName := "db_access"
-	region := "ap-northeast-2"
-	config, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+func loadEnvironment() (DatabaseConfig) {
+	stringConfig := os.Getenv("db")
+	var config DatabaseConfig
+
+	err := json.Unmarshal([]byte(stringConfig), &config)
 	handleError(err)
 
-	svc := secretsmanager.NewFromConfig(config)
-
-	input := &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(secretName),
-	}
-
-	result, err := svc.GetSecretValue(context.TODO(), input)
-	handleError(err)
-
-	var secretString string = *result.SecretString
-
-	var secret DatabaseConfig
-
-	err = json.Unmarshal([]byte(secretString), &secret)
-	handleError(err)
-
-	return secret
+	return config 
 }
 
 func main() {
-	config := loadSecretManager()
-	
+	config := loadEnvironment()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
